@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>将棋・王道マイナー仕分け</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .swipe-card { transition: transform 0.3s ease, opacity 0.3s; }
+    </style>
+</head>
+<body class="bg-slate-100 h-screen flex flex-col items-center justify-center font-sans">
+
+    <div id="game-container" class="w-80 h-[450px] relative">
+        <div id="card" class="swipe-card absolute inset-0 bg-white rounded-2xl shadow-xl flex flex-col items-center justify-center p-6 border-2 border-slate-200">
+            <h2 id="strategy-name" class="text-3xl font-bold text-slate-800 mb-4">読み込み中...</h2>
+            <p class="text-slate-400">← マイナー | 王道 →</p>
+        </div>
+    </div>
+
+    <div class="flex gap-10 mt-10">
+        <button onclick="vote('minor')" class="bg-red-500 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:scale-105 active:scale-95">マイナー</button>
+        <button onclick="vote('major')" class="bg-blue-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:scale-105 active:scale-95">王道</button>
+    </div>
+
+    <p id="result-msg" class="mt-6 font-bold text-lg text-slate-700"></p>
+
+    <script>
+        const API_URL = "https://script.google.com/macros/s/AKfycbwEq9TZNAzfrKlpcPG7SBQWFy7nzaH2Oas19iiYSlbLh8tMISmpDMu_g3LGJVBcN8mC-A/exec"; // ★ここにURLを貼り付け！
+        let currentStrategy = null;
+
+        // データを取得
+        async function loadNext() {
+            const response = await fetch(API_URL);
+            const data = await response.json();
+            if (data.length > 0) {
+                currentStrategy = data[Math.floor(Math.random() * data.length)];
+                document.getElementById('strategy-name').innerText = currentStrategy.戦法名;
+                document.getElementById('result-msg').innerText = "";
+                document.getElementById('card').style.transform = "translateX(0) rotate(0)";
+                document.getElementById('card').style.opacity = "1";
+            } else {
+                document.getElementById('strategy-name').innerText = "スプシに戦法を入れてね";
+            }
+        }
+
+        // 投票する
+        async function vote(choice) {
+            if (!currentStrategy) return;
+            
+            // カードを飛ばす演出
+            const card = document.getElementById('card');
+            card.style.transform = choice === 'major' ? "translateX(200px) rotate(20deg)" : "translateX(-200px) rotate(-20deg)";
+            card.style.opacity = "0";
+
+            // GASに送信
+            await fetch(API_URL, {
+                method: "POST",
+                body: JSON.stringify({ id: currentStrategy.ID, choice: choice })
+            });
+
+            // 正解判定（多数派なら正解）
+            const majorCount = parseInt(currentStrategy["王道数 (Left)"]);
+            const minorCount = parseInt(currentStrategy["マイナー数 (Right)"]);
+            const isMajorOpinion = majorCount >= minorCount ? 'major' : 'minor';
+
+            if (choice === isMajorOpinion) {
+                document.getElementById('result-msg').innerText = "✅ 世間と同じ感覚です！";
+            } else {
+                document.getElementById('result-msg').innerText = "❌ あなたは少数派です！";
+            }
+
+            setTimeout(loadNext, 1000);
+        }
+
+        loadNext();
+    </script>
+</body>
+</html>
