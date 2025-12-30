@@ -11,66 +11,86 @@
 </head>
 <body class="bg-slate-100 h-screen flex flex-col items-center justify-center font-sans">
 
-    <div id="game-container" class="w-80 h-[450px] relative">
+    <div id="game-container" class="w-80 h-[400px] relative">
         <div id="card" class="swipe-card absolute inset-0 bg-white rounded-2xl shadow-xl flex flex-col items-center justify-center p-6 border-2 border-slate-200">
-            <h2 id="strategy-name" class="text-3xl font-bold text-slate-800 mb-4">読み込み中...</h2>
-            <p class="text-slate-400">← マイナー | 王道 →</p>
+            <h2 id="strategy-name" class="text-3xl font-bold text-slate-800 mb-4 text-center">読み込み中...</h2>
+            <p id="guide-text" class="text-slate-400">← 王道 (左) | マイナー (右) →</p>
         </div>
     </div>
 
-    <div class="flex gap-10 mt-10">
-        <button onclick="vote('minor')" class="bg-red-500 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:scale-105 active:scale-95">マイナー</button>
+    <div id="button-container" class="flex gap-10 mt-10">
         <button onclick="vote('major')" class="bg-blue-600 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:scale-105 active:scale-95">王道</button>
+        <button onclick="vote('minor')" class="bg-red-500 text-white px-6 py-3 rounded-full font-bold shadow-lg hover:scale-105 active:scale-95">マイナー</button>
     </div>
 
-    <p id="result-msg" class="mt-6 font-bold text-lg text-slate-700"></p>
+    <div id="result-display" class="mt-8 text-center h-24">
+        <p id="result-msg" class="font-bold text-xl text-slate-800"></p>
+        <div id="vote-counts" class="hidden mt-2 text-sm text-slate-500 bg-white p-3 rounded-lg shadow-inner">
+            </div>
+    </div>
 
     <script>
-        const API_URL = "https://script.google.com/macros/s/AKfycbwEq9TZNAzfrKlpcPG7SBQWFy7nzaH2Oas19iiYSlbLh8tMISmpDMu_g3LGJVBcN8mC-A/exec"; // ★ここにURLを貼り付け！
+        // ★ここにあなたのGASウェブアプリURLを貼り付けてください
+        const API_URL = "https://script.google.com/macros/s/AKfycbwEq9TZNAzfrKlpcPG7SBQWFy7nzaH2Oas19iiYSlbLh8tMISmpDMu_g3LGJVBcN8mC-A/exec"; 
+        
         let currentStrategy = null;
+        let isProcessing = false;
 
         // データを取得
         async function loadNext() {
-            const response = await fetch(API_URL);
-            const data = await response.json();
-            if (data.length > 0) {
-                currentStrategy = data[Math.floor(Math.random() * data.length)];
-                document.getElementById('strategy-name').innerText = currentStrategy.戦法名;
-                document.getElementById('result-msg').innerText = "";
-                document.getElementById('card').style.transform = "translateX(0) rotate(0)";
-                document.getElementById('card').style.opacity = "1";
-            } else {
-                document.getElementById('strategy-name').innerText = "スプシに戦法を入れてね";
+            isProcessing = false;
+            document.getElementById('vote-counts').classList.add('hidden');
+            document.getElementById('result-msg').innerText = "";
+            
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                if (data.length > 0) {
+                    currentStrategy = data[Math.floor(Math.random() * data.length)];
+                    document.getElementById('strategy-name').innerText = currentStrategy.戦法名;
+                    document.getElementById('card').style.transform = "translateX(0) rotate(0)";
+                    document.getElementById('card').style.opacity = "1";
+                }
+            } catch (e) {
+                document.getElementById('strategy-name').innerText = "エラー：読み込めませんでした";
             }
         }
 
         // 投票する
         async function vote(choice) {
-            if (!currentStrategy) return;
+            if (!currentStrategy || isProcessing) return;
+            isProcessing = true;
             
-            // カードを飛ばす演出
+            // 1. 今の票数を取得
+            let majorCount = parseInt(currentStrategy["王道数 (Left)"]) || 0;
+            let minorCount = parseInt(currentStrategy["マイナー数 (Right)"]) || 0;
+
+            // 2. 自分の1票を足す
+            if (choice === 'major') majorCount++;
+            else minorCount++;
+
+            // 3. カードを飛ばす
             const card = document.getElementById('card');
-            card.style.transform = choice === 'major' ? "translateX(200px) rotate(20deg)" : "translateX(-200px) rotate(-20deg)";
+            card.style.transform = choice === 'major' ? "translateX(-200px) rotate(-20deg)" : "translateX(200px) rotate(20deg)";
             card.style.opacity = "0";
 
-            // GASに送信
-            await fetch(API_URL, {
+            // 4. GASに送信
+            fetch(API_URL, {
                 method: "POST",
                 body: JSON.stringify({ id: currentStrategy.ID, choice: choice })
             });
 
-            // 正解判定（多数派なら正解）
-            const majorCount = parseInt(currentStrategy["王道数 (Left)"]);
-            const minorCount = parseInt(currentStrategy["マイナー数 (Right)"]);
-            const isMajorOpinion = majorCount >= minorCount ? 'major' : 'minor';
+            // 5. 結果と票数を表示
+            const isMajorOpinion = (majorCount >= minorCount) ? 'major' : 'minor';
+            const resultMsg = (choice === isMajorOpinion) ? "✅ 世間と同じ感覚です！" : "❌ あなたは少数派です！";
+            
+            document.getElementById('result-msg').innerText = resultMsg;
+            const voteDisplay = document.getElementById('vote-counts');
+            voteDisplay.classList.remove('hidden');
+            voteDisplay.innerHTML = `王道: <span class="text-blue-600 font-bold">${majorCount}票</span> / マイナー: <span class="text-red-600 font-bold">${minorCount}票</span>`;
 
-            if (choice === isMajorOpinion) {
-                document.getElementById('result-msg').innerText = "✅ 世間と同じ感覚です！";
-            } else {
-                document.getElementById('result-msg').innerText = "❌ あなたは少数派です！";
-            }
-
-            setTimeout(loadNext, 1000);
+            // 2.5秒待ってから次へ
+            setTimeout(loadNext, 2500);
         }
 
         loadNext();
